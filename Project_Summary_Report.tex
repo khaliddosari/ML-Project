@@ -1,0 +1,428 @@
+% ============================================================================
+%  Machine Learning Capstone Project - Summary Report
+%  Self contained: no external images, no uncommon packages.
+%  Compile with: pdflatex Project_Summary_Report.tex   (run twice for the ToC)
+% ============================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{deep}{HTML}{522CBA}
+\definecolor{lilac}{HTML}{9B78F7}
+
+\titleformat{\section}{\large\bfseries\color{deep}}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\normalsize\bfseries\color{deep}}{\thesubsection}{0.7em}{}
+\titlespacing*{\section}{0pt}{1.4ex plus .3ex}{0.7ex}
+\titlespacing*{\subsection}{0pt}{1.1ex plus .2ex}{0.5ex}
+
+\setlist[itemize]{leftmargin=1.3em,topsep=2pt,itemsep=1.5pt,parsep=0pt}
+\renewcommand{\arraystretch}{1.15}
+
+\newcommand{\metric}[1]{\textbf{\color{deep}#1}}
+
+\begin{document}
+
+% ---------------------------------------------------------------- title block
+\begin{center}
+    {\large\color{lilac}\bfseries MACHINE LEARNING CAPSTONE PROJECT}\\[0.8em]
+    {\LARGE\bfseries\color{deep} Predicting Flight Arrival Delay}\\[0.35em]
+    {\LARGE\bfseries\color{deep} from Post Departure Information}\\[1.0em]
+    {\normalsize Khalid Al Dosari \quad\textbullet\quad Abdulaziz Alshareef
+     \quad\textbullet\quad Anas Alzahrani \quad\textbullet\quad Feras Madkhali}\\[0.4em]
+    {\small Tuwaiq Bootcamp}
+\end{center}
+\vspace{0.6em}
+\hrule
+\vspace{1.2em}
+
+% ---------------------------------------------------------------- 1
+\section{Problem and Dataset}
+
+\textbf{Objective.} Predict how late a US domestic flight will arrive, at the moment it
+pushes back from the gate. Two targets are modelled on the same rows, the same features
+and the same split: \texttt{ArrDel15} (classification, does the flight land 15 minutes
+late or more) and \texttt{ArrDelay} (regression, arrival delay in minutes, which may be
+negative when a flight arrives early).
+
+\textbf{Real world motivation.} Once an aircraft has left the gate, airlines, airports
+and connecting passengers need an arrival estimate sharper than the printed schedule.
+Gate assignment, crew rotation and passenger connection decisions all depend on it.
+
+\textbf{Dataset.} Kaggle, \emph{Flight Delay Dataset 2018--2022}, file
+\texttt{Combined\_Flights\_2018.csv}, originally published by the US Department of
+Transportation, Bureau of Transportation Statistics (On Time Performance database).
+
+\begin{center}
+\small\url{https://www.kaggle.com/datasets/robikscube/flight-delay-dataset-20182022}
+\end{center}
+
+One row is one scheduled domestic flight. The raw file contains \metric{5{,}689{,}512
+rows} and \metric{61 columns}, mixing numerical measurements, categorical identifiers
+and schedule fields.
+
+\textbf{Why machine learning is appropriate.} Arrival delay depends on how late the
+aircraft already is, ground congestion, route, carrier and time of day, all interacting.
+No closed form rule captures this, but a model can learn the pattern from millions of
+historical flights.
+
+% ---------------------------------------------------------------- 2
+\section{Data Quality and Cleaning}
+
+Seven checks were run on the raw data. The decision taken mattered more than the
+technique used, so each is justified rather than applied mechanically.
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{3.5cm} p{5.3cm} p{5.8cm}@{}}
+\toprule
+\textbf{Check} & \textbf{What was found} & \textbf{Decision and reason} \\
+\midrule
+Missing values & 1.8\% of arrival fields, 1.5\% of departure fields &
+Drop cancelled (1.55\%) and diverted (0.25\%) flights. A flight that never arrived has
+no arrival delay to predict, so imputing would invent data. \\
+Duplicate rows & None found & Nothing to remove. \\
+Incorrect types & \texttt{CRSDepTime} is an integer but encodes a clock time (1259 to
+1300 is one minute, not 41) &
+Convert to minutes since midnight, then to cyclic sine and cosine so 23:59 and 00:01 sit
+close together. \\
+Invalid values & 67 rows with negative scheduled or actual duration &
+Drop. Physically impossible and unrecoverable; 67 of 5.69M is negligible. \\
+Inconsistent categories & \texttt{Airline}, \texttt{Origin}, \texttt{Dest} checked for
+case and spelling variants, none collide &
+No cleaning required. \\
+Outliers & IQR flags 9.4\% of \texttt{ArrDelay} and 13.1\% of \texttt{DepDelay};
+skewness 8.5 and 9.6 &
+\textbf{Keep all.} The long right tail is the phenomenon the project exists to predict.
+Removing it would bias the model toward underestimating real delays. \\
+Class imbalance & 80.5\% on time against 19.5\% delayed &
+Report ROC-AUC, Precision, Recall and F1 rather than Accuracy alone; use
+\texttt{class\_weight="balanced"} where supported. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+After cleaning, \metric{5{,}578{,}560 rows} remain.
+
+% ---------------------------------------------------------------- 3
+\section{Exploratory Analysis: Five Findings}
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=3pt]
+  \item \textbf{Departure delay dominates.} \texttt{DepDelay} correlates with
+        \texttt{ArrDelay} at \metric{0.96}. Once a flight leaves late it lands late
+        almost as a rule. This single relationship sets both the ceiling and the floor
+        for the entire project.
+  \item \textbf{Delay compounds through the day.} Mean arrival delay rises from about
+        $-3$ minutes for 5am departures to $+12$ minutes around 6pm, as aircraft
+        rotations fall progressively behind schedule. Scheduled hour is therefore a
+        cheap and strong feature.
+  \item \textbf{Delay is seasonal.} Summer (June to August, 9.7 to 11.5 minutes mean)
+        is roughly three times worse than autumn (September to October, about 3
+        minutes), consistent with thunderstorm season. Calendar month carries real
+        signal.
+  \item \textbf{Carriers differ substantially at the same scale.} Among the ten largest
+        carriers, JetBlue is delayed 27.3\% of the time against Delta at 12.5\%.
+        Operating practice and hub congestion matter, justifying \texttt{Airline} as a
+        feature despite being categorical.
+  \item \textbf{Ground congestion adds independent signal.} \texttt{TaxiOut} correlates
+        with \texttt{ArrDelay} at 0.22, moderate but real, and is not visible in
+        \texttt{DepDelay} alone. Conversely \texttt{Distance} and
+        \texttt{CRSElapsedTime} correlate at 0.98 with each other but only $-0.02$ with
+        the target, so trip length alone says little about lateness and only one of the
+        two is retained.
+\end{enumerate}
+
+% ---------------------------------------------------------------- 4
+\section{Feature Preparation and the Leakage Boundary}
+
+The single most consequential decision in this project is \emph{when} the prediction is
+made. We fix that moment at departure, which determines exactly which columns are legal.
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{7.0cm} p{7.6cm}@{}}
+\toprule
+\textbf{Legal at departure (used)} & \textbf{Banned, known only after landing} \\
+\midrule
+\texttt{DepDelay}, \texttt{TaxiOut}, \texttt{CRSElapsedTime},
+\texttt{dep\_sin}, \texttt{dep\_cos}, \texttt{Month}, \texttt{DayofMonth},
+\texttt{DayOfWeek}, \texttt{is\_weekend}, \texttt{Airline}, \texttt{Origin},
+\texttt{Dest}
+&
+\texttt{ArrTime}, \texttt{WheelsOn}, \texttt{TaxiIn},
+\texttt{ActualElapsedTime}, \texttt{AirTime}, \texttt{ArrDelayMinutes},
+\texttt{ArrivalDelayGroups}, \texttt{DivAirportLandings} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Enforcement.} The feature list is asserted against the banned list in code before
+any model is fitted, and the train/validation/test split happens before any target
+dependent statistic is computed. No test data is used to fit scalers, encoders or models.
+
+\textbf{Transformations and their justification.}
+\begin{itemize}
+  \item Identifier and near duplicate columns removed: they carry no independent signal
+        or duplicate \texttt{CRSElapsedTime}.
+  \item Cyclic encoding of scheduled departure time: required so that midnight wraps
+        correctly. Necessary for distance and margin based models (KNN, SVM) and linear
+        models; harmless for trees.
+  \item One hot encoding of \texttt{Airline}, \texttt{Origin}, \texttt{Dest} with a
+        minimum frequency threshold, so rare airports do not each receive a column.
+  \item Standardisation of numeric columns for scale sensitive models (Logistic and
+        Linear Regression, KNN, SVM). Tree based models receive raw values, since they
+        split on thresholds and are scale invariant.
+\end{itemize}
+
+\textbf{Sampling and splitting.} SVM and SVR scale roughly quadratically to cubically
+with row count and become impractical beyond a few tens of thousands of rows. Rather
+than evaluate different models on different samples, one stratified sample of
+\metric{30{,}000 rows} is shared by every model so comparisons remain fair. It is split
+\metric{60/20/20} into train (18,000), validation (6,000) and test (6,000), stratified
+on \texttt{ArrDel15} at every step so the 19.5\% delay rate is preserved throughout. The
+test set is evaluated once, for the final reported numbers only.
+
+% ---------------------------------------------------------------- 5
+\section{Models and Results}
+
+Six algorithms were trained per problem, chosen to span different learning styles:
+linear, instance based, a single tree, a bagged ensemble, a boosted ensemble and a
+margin based model.
+
+\subsection*{Classification (target \texttt{ArrDel15})}
+
+\begin{center}
+\small
+\begin{tabular}{@{}l c c c c c@{}}
+\toprule
+\textbf{Model} & \textbf{Train AUC} & \textbf{Val AUC} & \textbf{Test AUC} &
+\textbf{Test F1} & \textbf{Gap} \\
+\midrule
+Logistic Regression (baseline) & 0.968 & 0.957 & \textbf{0.9649} & 0.821 & \textbf{0.011} \\
+K-Nearest Neighbors            & 0.941 & 0.898 & 0.8969 & 0.559 & 0.043 \\
+Decision Tree                  & 0.970 & 0.948 & 0.9510 & 0.794 & 0.022 \\
+Random Forest                  & 0.964 & 0.939 & 0.9500 & 0.818 & 0.025 \\
+Gradient Boosting (XGBoost)    & 0.993 & 0.957 & 0.9631 & \textbf{0.835} & 0.036 \\
+Support Vector Machine (RBF)   & 0.985 & 0.956 & 0.9639 & 0.831 & 0.030 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{Regression (target \texttt{ArrDelay}, minutes)}
+
+\begin{center}
+\small
+\begin{tabular}{@{}l c c c c c@{}}
+\toprule
+\textbf{Model} & \textbf{Train MAE} & \textbf{Val MAE} & \textbf{Test MAE} &
+\textbf{Test RMSE} & \textbf{Test $R^2$} \\
+\midrule
+Linear Regression (baseline)  & 7.17 & 7.35 & \textbf{7.29} & \textbf{10.35} & \textbf{0.958} \\
+KNN Regressor                 & 11.83 & 12.27 & 12.54 & 18.36 & 0.868 \\
+Decision Tree Regressor       & 8.35 & 8.71 & 8.56 & 13.86 & 0.925 \\
+Random Forest Regressor       & 6.85 & 7.91 & 7.79 & 11.06 & 0.952 \\
+Gradient Boosting Regressor   & 6.60 & 8.40 & 8.29 & 19.18 & 0.856 \\
+Support Vector Regression     & 8.14 & 9.20 & 9.39 & 31.31 & 0.615 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Why ROC-AUC and not Accuracy.} With a 80/20 split, a model predicting ``on time''
+for every flight scores about 80\% Accuracy while catching zero delayed flights. ROC-AUC
+is threshold independent and undistorted by the imbalance, so it is the primary
+classification metric. RMSE is reported alongside MAE because it penalises large errors
+more heavily, and the largest errors are the operationally important ones.
+
+% ---------------------------------------------------------------- 6
+\section{Overfitting and Hyperparameter Behaviour}
+
+Using the rule that a train minus validation gap below 0.02 generalises well and above
+0.05 is substantial, no model is severely overfit at its chosen settings. Logistic
+Regression is the tightest (0.011); XGBoost is the loosest of the non-KNN models (0.036,
+train AUC 0.993 against validation 0.957), indicating it has begun to fit training
+noise. KNN shows the weakest performance overall, hurt by the high dimensional one hot
+space where distance loses meaning.
+
+Four hyperparameter sweeps were run, and all four produced the same shape: validation
+performance rises to a peak and then declines while training performance keeps climbing.
+
+\begin{center}
+\small
+\begin{tabular}{@{}l l l l@{}}
+\toprule
+\textbf{Model} & \textbf{Parameter} & \textbf{Behaviour observed} & \textbf{Chosen} \\
+\midrule
+KNN & \texttt{n\_neighbors} &
+$k{=}1$ memorises: train 1.000, val 0.707, gap 0.293. Gap falls to 0.016 by $k{=}100$. &
+$k=50$ \\
+Decision Tree & \texttt{max\_depth} &
+Validation peaks at depth 4 (0.943) then falls while train climbs to 0.984 unlimited. &
+depth 6 \\
+XGBoost & \texttt{learning\_rate} &
+Validation peaks at 0.03 (0.961); gap grows 0.012 $\rightarrow$ 0.052 as rate rises to 0.40. &
+0.03 \\
+SVM & \texttt{C} &
+Validation peaks at $C{=}1$ (0.956); gap reaches 0.060 by $C{=}100$. &
+$C=1$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The lesson is consistent: model complexity must be tuned against a validation set, never
+selected by what looks strongest on training data.
+
+% ---------------------------------------------------------------- 7
+\section{Model Selection}
+
+\textbf{Selected classifier: Logistic Regression.} It attains the best test ROC-AUC
+(0.9649, marginally ahead of XGBoost at 0.9631), has the smallest train--validation gap
+of all six models, trains in a fraction of a second, and produces directly interpretable
+coefficients, which matters for an operational tool where staff may need to know why a
+flight was flagged. XGBoost achieves a slightly higher F1 (0.835 against 0.821), but
+that gain does not justify the added complexity and the larger overfitting gap.
+
+\textbf{Selected regressor: Linear Regression.} It records the best test $R^2$ and MAE
+of all six models, beating every more complex alternative outright. This is coherent
+with the problem structure: \texttt{ArrDelay} is close to a linear function of
+\texttt{DepDelay} plus a smaller adjustment, so a linear model already captures most of
+the signal, and additional flexibility costs generalisation and speed without buying
+accuracy.
+
+Selection considered performance, generalisation, interpretability and computational
+cost together, not score alone. Notably, neither advanced model clearly beat its
+baseline: for regression the baseline is the outright winner.
+
+% ---------------------------------------------------------------- 8
+\section{Error Analysis: Three Findings}
+
+Confusion matrix for the selected classifier on the 6,000 row test set:
+TN 4{,}502, FP 329, FN 125, TP 1{,}044.
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=3pt]
+  \item \textbf{False negatives are flights that departed on time.} The 125 missed
+        delays have a mean \texttt{DepDelay} of just 0.15 minutes, effectively identical
+        to correctly predicted on time flights, against 71.6 minutes for true positives.
+        These flights lost their time \emph{in the air}, after the moment the model makes
+        its prediction. No feature available at departure could have caught them. This is
+        a hard limit of the framing, not a fixable modelling weakness.
+  \item \textbf{False positives are genuinely borderline.} The 329 false alarms have a
+        mean \texttt{DepDelay} of 12.3 minutes and \texttt{TaxiOut} of 22.6, both clearly
+        above the correct negative averages ($-3.2$ and 15.4). These are flights that
+        looked risky at departure and then recovered time en route, an uncertain case
+        rather than a model error.
+  \item \textbf{Regression residuals are mildly but systematically biased.} For on time
+        flights the mean residual is $-2.6$ minutes (slight over prediction), while for
+        \emph{every} bucket of actually delayed flights it is consistently positive at
+        $+4$ to $+6$ minutes. The model under predicts how severe a delay becomes once
+        one is underway. The largest individual errors follow the same in air disruption
+        pattern as the classification false negatives.
+\end{enumerate}
+
+Which error matters more depends on use. False negatives (a passenger told the flight is
+fine when it is not) are more damaging operationally than false positives, which argues
+for keeping the balanced class weighting that favours Recall on the delayed class.
+
+% ---------------------------------------------------------------- 9
+\section{Unsupervised Learning}
+
+\textbf{Clustering.} K-Means and a Gaussian Mixture Model were applied to six flight
+shape features (\texttt{CRSElapsedTime}, \texttt{Distance}, \texttt{dep\_sin},
+\texttt{dep\_cos}, \texttt{DepDelay}, \texttt{TaxiOut}), standardised because both
+methods are scale sensitive. \textbf{The target was never used.}
+
+K-Means used $k{=}4$: silhouette technically peaks at $k{=}2$ (0.323) but produces one
+dominant split, while $k{=}4$ (0.286) yields interpretable, differently sized segments.
+
+\begin{itemize}
+  \item \textbf{Cluster 0} (4,599): long haul, 277 min and 1,935 mi, on time on average,
+        18\% delayed.
+  \item \textbf{Cluster 1} (10,222): short flights departing earlier in the day, 24\%
+        delayed, the worst of the three normal clusters.
+  \item \textbf{Cluster 2} (14,567): short and medium flights departing later, the
+        calmest group at 14\% delayed.
+  \item \textbf{Cluster 3} (612): mean \texttt{ArrDelay} \metric{245.8 minutes}, 100\%
+        delayed. K-Means isolated a severe delay segment entirely on its own, from
+        schedule and ground features alone, without ever seeing the target.
+\end{itemize}
+
+The GMM ($k{=}4$, chosen to match for comparison since BIC decreases monotonically
+through $k{=}8$) independently found a comparable group: cluster 1 (2,755 flights) has
+mean \texttt{TaxiOut} 30.7 minutes, the highest by far, mean \texttt{ArrDelay} 103.6 and
+92\% delayed. The two algorithms agree that a distinct, severely delayed segment exists,
+but define its boundary differently: K-Means anchors on total delay magnitude, GMM on
+ground congestion. Silhouette values of 0.25 to 0.32 are modest, as expected for
+continuous operational data with no natural gaps between groups.
+
+\textbf{PCA.} One hot encoding produces \metric{220 features}. Retaining 90\% of the
+variance requires \metric{44 principal components}, a five fold reduction. Logistic
+Regression trained on the reduced representation scores test ROC-AUC 0.9640 against
+0.9649 on the full feature set, a difference of 0.0009. PCA is therefore useful here as
+\emph{compression} rather than as an accuracy improvement: valuable for a slower model
+such as KNN or SVM, or a storage constrained deployment, but unnecessary for performance,
+since Logistic Regression already handles 220 features without overfitting. Projected
+onto the first two components the classes overlap heavily, which is expected, as those
+two components capture only a modest share of total variance.
+
+% ---------------------------------------------------------------- 10
+\section{Conclusions and Recommendations}
+
+\textbf{Most important finding.} The 0.96 correlation between departure and arrival
+delay both enables this project and bounds it.
+
+\textbf{Highest impact decision.} Fixing the leakage boundary at ``moment of departure''
+rather than ``moment of landing''. That choice, made in Part 1 before any modelling,
+influenced the final numbers more than any algorithm or hyperparameter selected
+afterwards. A strictly pre departure model on the same data would top out far lower.
+
+\textbf{Limitations.}
+\begin{itemize}
+  \item The model is only usable \emph{after} a flight has departed. It cannot address
+        the harder and more valuable pre departure problem.
+  \item It cannot observe weather or air traffic control conditions en route, which is
+        precisely where its residual errors originate.
+  \item Results are based on a 30,000 row sample of a single year (2018), constrained by
+        SVM scalability.
+\end{itemize}
+
+\textbf{With more time or data.} Add live weather along the route to attack the in air
+blind spot; build a strictly pre departure model side by side so the value of waiting
+until departure becomes directly measurable rather than argued; and refit the selected
+linear models on the full 5.58M rows, which is computationally trivial once SVM is
+dropped.
+
+\textbf{Recommendation for real world use.} Yes, for post departure updates: passenger
+notification, gate assignment and connection planning, given strong and well generalising
+test performance. No, for any decision that must be made before departure, which is a
+different and substantially harder problem this project deliberately did not attempt.
+
+% ---------------------------------------------------------------- 11
+\section{Reflection}
+
+The most challenging part was deciding precisely where the leakage boundary sits. It is
+easy to state that no post landing column may be used, but \texttt{TaxiOut} and
+\texttt{WheelsOff} sit exactly on the line and required an explicit, defensible decision
+about when ``now'' is.
+
+The most surprising result was that the baselines won. Linear Regression beat every more
+complex regressor outright, and Logistic Regression matched or beat every more complex
+classifier on ROC-AUC while generalising better than all of them. Additional complexity
+did not translate into a better model.
+
+On model selection, the best model is not the most sophisticated one; it is the one that
+generalises reliably and fits the deployment constraints of speed and interpretability.
+On overfitting, every sweep in Part 11 showed the same rise then fall in validation
+performance, which reframed overfitting from a binary failure state into a matter of
+degree that must be checked at every complexity setting.
+
+If repeated, we would build the pre departure model in parallel from the start, so the
+two framings could be compared directly rather than one being argued relative to the
+other.
+
+\end{document}
