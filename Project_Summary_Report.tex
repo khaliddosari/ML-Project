@@ -192,9 +192,8 @@ test set is evaluated once, for the final reported numbers only.
 % ---------------------------------------------------------------- 5
 \section{Models and Results}
 
-Six algorithms were trained per problem, chosen to span different learning styles:
-linear, instance based, a single tree, a bagged ensemble, a boosted ensemble and a
-margin based model.
+Four algorithms were trained per problem, chosen to span different learning styles:
+linear (baseline), instance based, a boosted ensemble and a margin based model.
 
 \subsection*{Classification (target \texttt{ArrDel15})}
 
@@ -207,8 +206,6 @@ margin based model.
 \midrule
 Logistic Regression (baseline) & 0.968 & 0.957 & \textbf{0.9649} & 0.821 & \textbf{0.011} \\
 K-Nearest Neighbors            & 0.941 & 0.898 & 0.8969 & 0.559 & 0.043 \\
-Decision Tree                  & 0.970 & 0.948 & 0.9510 & 0.794 & 0.022 \\
-Random Forest                  & 0.964 & 0.939 & 0.9500 & 0.818 & 0.025 \\
 Gradient Boosting (XGBoost)    & 0.993 & 0.957 & 0.9631 & \textbf{0.835} & 0.036 \\
 Support Vector Machine (RBF)   & 0.985 & 0.956 & 0.9639 & 0.831 & 0.030 \\
 \bottomrule
@@ -226,8 +223,6 @@ Support Vector Machine (RBF)   & 0.985 & 0.956 & 0.9639 & 0.831 & 0.030 \\
 \midrule
 Linear Regression (baseline)  & 7.17 & 7.35 & \textbf{7.29} & \textbf{10.35} & \textbf{0.958} \\
 KNN Regressor                 & 11.83 & 12.27 & 12.54 & 18.36 & 0.868 \\
-Decision Tree Regressor       & 8.35 & 8.71 & 8.56 & 13.86 & 0.925 \\
-Random Forest Regressor       & 6.85 & 7.91 & 7.79 & 11.06 & 0.952 \\
 Gradient Boosting Regressor   & 6.60 & 8.40 & 8.29 & 19.18 & 0.856 \\
 Support Vector Regression     & 8.14 & 9.20 & 9.39 & 31.31 & 0.615 \\
 \bottomrule
@@ -250,7 +245,7 @@ train AUC 0.993 against validation 0.957), indicating it has begun to fit traini
 noise. KNN shows the weakest performance overall, hurt by the high dimensional one hot
 space where distance loses meaning.
 
-Four hyperparameter sweeps were run, and all four produced the same shape: validation
+Three hyperparameter sweeps were run, and all three produced the same shape: validation
 performance rises to a peak and then declines while training performance keeps climbing.
 
 \begin{center}
@@ -262,9 +257,6 @@ performance rises to a peak and then declines while training performance keeps c
 KNN & \texttt{n\_neighbors} &
 $k{=}1$ memorises: train 1.000, val 0.707, gap 0.293. Gap falls to 0.016 by $k{=}100$. &
 $k=50$ \\
-Decision Tree & \texttt{max\_depth} &
-Validation peaks at depth 4 (0.943) then falls while train climbs to 0.984 unlimited. &
-depth 6 \\
 XGBoost & \texttt{learning\_rate} &
 Validation peaks at 0.03 (0.961); gap grows 0.012 $\rightarrow$ 0.052 as rate rises to 0.40. &
 0.03 \\
@@ -283,13 +275,13 @@ selected by what looks strongest on training data.
 
 \textbf{Selected classifier: Logistic Regression.} It attains the best test ROC-AUC
 (0.9649, marginally ahead of XGBoost at 0.9631), has the smallest train--validation gap
-of all six models, trains in a fraction of a second, and produces directly interpretable
+of all four models, trains in a fraction of a second, and produces directly interpretable
 coefficients, which matters for an operational tool where staff may need to know why a
 flight was flagged. XGBoost achieves a slightly higher F1 (0.835 against 0.821), but
 that gain does not justify the added complexity and the larger overfitting gap.
 
 \textbf{Selected regressor: Linear Regression.} It records the best test $R^2$ and MAE
-of all six models, beating every more complex alternative outright. This is coherent
+of all four models, beating every more complex alternative outright. This is coherent
 with the problem structure: \texttt{ArrDelay} is close to a linear function of
 \texttt{DepDelay} plus a smaller adjustment, so a linear model already captures most of
 the signal, and additional flexibility costs generalisation and speed without buying
@@ -332,10 +324,10 @@ for keeping the balanced class weighting that favours Recall on the delayed clas
 % ---------------------------------------------------------------- 9
 \section{Unsupervised Learning}
 
-\textbf{Clustering.} K-Means and a Gaussian Mixture Model were applied to six flight
-shape features (\texttt{CRSElapsedTime}, \texttt{Distance}, \texttt{dep\_sin},
-\texttt{dep\_cos}, \texttt{DepDelay}, \texttt{TaxiOut}), standardised because both
-methods are scale sensitive. \textbf{The target was never used.}
+\textbf{Clustering.} K-Means and DBSCAN were applied to six flight shape features
+(\texttt{CRSElapsedTime}, \texttt{Distance}, \texttt{dep\_sin}, \texttt{dep\_cos},
+\texttt{DepDelay}, \texttt{TaxiOut}), standardised because both methods rely on
+distance. \textbf{The target was never used.}
 
 K-Means used $k{=}4$: silhouette technically peaks at $k{=}2$ (0.323) but produces one
 dominant split, while $k{=}4$ (0.286) yields interpretable, differently sized segments.
@@ -352,13 +344,19 @@ dominant split, while $k{=}4$ (0.286) yields interpretable, differently sized se
         schedule and ground features alone, without ever seeing the target.
 \end{itemize}
 
-The GMM ($k{=}4$, chosen to match for comparison since BIC decreases monotonically
-through $k{=}8$) independently found a comparable group: cluster 1 (2,755 flights) has
-mean \texttt{TaxiOut} 30.7 minutes, the highest by far, mean \texttt{ArrDelay} 103.6 and
-92\% delayed. The two algorithms agree that a distinct, severely delayed segment exists,
-but define its boundary differently: K-Means anchors on total delay magnitude, GMM on
-ground congestion. Silhouette values of 0.25 to 0.32 are modest, as expected for
-continuous operational data with no natural gaps between groups.
+DBSCAN used \texttt{min\_samples}~$=12$ (twice the six clustering features, a standard
+rule of thumb) and \texttt{eps}~$=0.90$, chosen from the knee of the k-distance plot
+(distance to each point's 12th nearest neighbour, sorted). At these settings DBSCAN does
+not partition the data into several groups at all: it finds one dense core cluster
+(29,299 flights, 97.7\%, mean \texttt{ArrDelay} 1.4 minutes, 18\% delayed) and marks
+\metric{701 flights (2.3\%)} as noise, points too sparse to belong to any dense
+neighbourhood. That noise set has mean \texttt{ArrDelay} 185.4 minutes, mean
+\texttt{TaxiOut} 39.1 minutes against 16.6 in the core, and a 92\% delay rate, essentially
+the same severely delayed segment K-Means isolated, reached without ever specifying how
+many clusters to look for. Agreement is partial rather than exact: 52.6\% of K-Means'
+612 flight cluster is labelled noise by DBSCAN, and 45.9\% of DBSCAN's noise falls inside
+that K-Means cluster. The two algorithms disagree at the margin because they define
+``unusual'' differently, K-Means by distance to a centroid, DBSCAN by local density.
 
 \textbf{PCA.} One hot encoding produces \metric{220 features}. Retaining 90\% of the
 variance requires \metric{44 principal components}, a five fold reduction. Logistic
