@@ -11,6 +11,14 @@ The model uses information available the moment a flight leaves the gate, such a
 
 On flights it has never seen before, it reaches a 96% ROC-AUC score, a standard accuracy measure for this type of prediction. That is well above what a simple schedule based estimate can achieve.
 
+## Model performance
+
+The plots below compare the classification and regression models on the held-out test set. Logistic Regression achieved the highest classification ROC-AUC at **0.965**, while Linear Regression achieved the highest regression R² at **0.958**.
+
+![Classification model comparison by test ROC-AUC](demo/public/plots/clf-roc-auc.png)
+
+![Regression model comparison by test R²](demo/public/plots/reg-r2.png)
+
 ## Why it matters for airlines and regulators
 
 Once a flight leaves the gate, airlines and airports still mostly rely on the original schedule for arrival estimates. This model replaces that guess with a live, data backed prediction. In practice, that supports:
