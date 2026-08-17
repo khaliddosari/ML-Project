@@ -35,4 +35,4 @@ For airlines and regulators, this points to a clear opportunity: collecting and 
 
 ## Try it
 
-See `demo/README.md` for instructions to run the interactive demo locally.
+Visit `https://mlproject.khalid-ai.dev` for a live demo.
