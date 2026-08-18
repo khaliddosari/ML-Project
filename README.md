@@ -44,3 +44,52 @@ For airlines and regulators, this points to a clear opportunity: collecting and 
 ## Try it
 
 Visit `https://mlproject.khalid-ai.dev` for a live demo.
+
+
+## Exploratory Data Analysis (EDA)
+
+Exploratory Data Analysis was performed to understand the main patterns, relationships, missing values, outliers, and target distribution in the flight delay dataset.
+
+### Exploratory Analysis
+
+We analyzed the relationship between departure delay and arrival delay, the average arrival delay by departure hour, and correlations between key numerical features.
+
+The analysis shows a strong relationship between `DepDelay` and `ArrDelay`, with a correlation of approximately **0.96**.
+
+![Exploratory Analysis](assets/exploratory_analysis.png)
+
+---
+
+### Missing Values and Outliers
+
+Missing values were analyzed across the dataset to identify columns that required preprocessing.
+
+We also examined outliers in important numerical features such as `ArrDelay`, `DepDelay`, and `TaxiOut` using IQR-based box plots.
+
+![Missing Values and Outliers](assets/missing_values_outliers.png)
+
+---
+
+### Target Distribution
+
+The `ArrDel15` target distribution was analyzed after excluding cancelled and diverted flights.
+
+The dataset contains:
+
+* **4,498,277** on-time flights
+* **1,088,342** flights delayed by 15 minutes or more
+
+This shows that the target classes are imbalanced, with significantly more on-time flights than delayed flights.
+
+![Target Distribution](assets/target_distribution.png)
+
+---
+
+### Key EDA Findings
+
+* Departure delay has a very strong relationship with arrival delay.
+* Arrival delays tend to increase during later departure hours.
+* Some numerical features show strong correlations with each other.
+* Several arrival and departure-related columns contain missing values.
+* Significant outliers exist in delay-related features.
+* The target distribution is imbalanced, with on-time flights being the majority class.
