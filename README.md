@@ -19,6 +19,30 @@ The plots below compare the classification and regression models on the held-out
 
 ![Regression model comparison by test R²](demo/public/plots/reg-r2.png)
 
+## Clustering
+
+KMeans and DBSCAN were run on six standardized flight-shape features. Neither algorithm sees `ArrDelay` or `ArrDel15`, which are used only afterwards to profile the groups that were found.
+
+Silhouette peaks at k=2, but **k=4** was chosen for interpretability.
+
+![KMeans elbow and silhouette by k](demo/public/plots/kmeans-elbow.png)
+
+The four clusters split into long-haul, early short-haul, later short-haul, and a **severe delay pocket** of 612 flights averaging **+245.8 minutes** and 100% delayed.
+
+![KMeans clusters and mean arrival delay per cluster](demo/public/plots/kmeans-clusters.png)
+
+DBSCAN (eps = 0.90, min_samples = 12) returns one dense core of 29,299 flights at +1.4 minutes plus 701 noise points at +185.3 minutes. Neither algorithm was told a severe segment exists, and both surfaced one anyway from schedule and ground features alone.
+
+## PCA
+
+PCA compresses the 220 encoded features into **44 principal components** while retaining **90.03%** of the variance, a five-fold reduction.
+
+Refitting Logistic Regression on the reduced representation costs almost nothing: test ROC-AUC moves from **96.49%** to **96.40%**.
+
+![PCA accuracy cost and test set in the first two principal components](demo/public/plots/pca-accuracy.png)
+
+PCA is useful here as compression, not as an accuracy improvement. The original features are already handled without serious overfitting and are easier to explain, so the reduced representation is not deployed.
+
 ## Why it matters for airlines and regulators
 
 Once a flight leaves the gate, airlines and airports still mostly rely on the original schedule for arrival estimates. This model replaces that guess with a live, data backed prediction. In practice, that supports:
